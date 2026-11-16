@@ -23,6 +23,58 @@ pub struct Agent {
     pub co_author: String,
 }
 
+/// Parse a phase selection. The final component is effort; the middle may be
+/// a full, hyphenated model ID. Plain agent names retain their existing meaning.
+pub fn phase_selection(name: &str) -> Option<(&str, &str, &str)> {
+    let (agent, rest) = name.split_once('-')?;
+    if !matches!(agent, "codex" | "claude") {
+        return None;
+    }
+    let (model, effort) = rest.rsplit_once('-')?;
+    if model.is_empty()
+        || !model
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
+        || !matches!(
+            effort,
+            "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+        )
+    {
+        return None;
+    }
+    Some((agent, model, effort))
+}
+
+pub fn base_agent_name(name: &str) -> &str {
+    phase_selection(name).map_or(name, |(agent, _, _)| agent)
+}
+
+fn selection_args(name: &str) -> Vec<String> {
+    let Some((agent, model, effort)) = phase_selection(name) else {
+        return Vec::new();
+    };
+    let model = match (agent, model) {
+        ("codex", "terra") => "gpt-6.1-terra",
+        ("codex", "luna") => "gpt-6-luna",
+        _ => model,
+    };
+    match agent {
+        "codex" => vec![
+            "--model".into(),
+            model.into(),
+            "-c".into(),
+            format!("model_reasoning_effort={effort}"),
+        ],
+        "claude" => vec![
+            "--model".into(),
+            model.into(),
+            "--effort".into(),
+            effort.into(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// How an agent accepts an initial prompt at launch.
 ///
 /// `Argv`/`FlagInteractive` let agtx hand the opening message to the process
@@ -98,6 +150,9 @@ impl Agent {
             spec::ResumeArgs::Append(extra) => s.base_args.iter().chain(extra).copied().collect(),
             spec::ResumeArgs::Replace(args) => args.to_vec(),
         };
+        let extra = selection_args(&self.name);
+        let mut args = args;
+        args.extend(extra.iter().map(String::as_str));
         spec::compose_command(s, &args, None)
     }
 
@@ -106,7 +161,12 @@ impl Agent {
     /// (task content and skill commands are sent later via tmux send_keys).
     pub fn build_interactive_command(&self, prompt: &str) -> String {
         match spec::spec(&self.name) {
-            Some(s) => spec::compose_command(s, s.base_args, Some(prompt)),
+            Some(s) => {
+                let extra = selection_args(&self.name);
+                let mut args = s.base_args.to_vec();
+                args.extend(extra.iter().map(String::as_str));
+                spec::compose_command(s, &args, Some(prompt))
+            }
             None if prompt.is_empty() => self.command.clone(),
             None => format!("{} '{}'", self.command, prompt.replace('\'', "'\"'\"'")),
         }

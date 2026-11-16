@@ -912,7 +912,9 @@ pub const AGENT_SPECS: &[AgentSpec] = &[
 /// Look up an agent's spec by name. `None` for agents agtx has not been taught,
 /// which fall back to generic behaviour throughout.
 pub fn spec(name: &str) -> Option<&'static AgentSpec> {
-    AGENT_SPECS.iter().find(|s| s.name == name)
+    AGENT_SPECS
+        .iter()
+        .find(|s| s.name == super::base_agent_name(name))
 }
 
 /// Build a shell command for `spec`: env prefix, binary, the given args, then

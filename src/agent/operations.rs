@@ -170,6 +170,14 @@ impl RealAgentRegistry {
 
 impl AgentRegistry for RealAgentRegistry {
     fn get(&self, agent_name: &str) -> Arc<dyn AgentOperations> {
+        if let Some((base, _, _)) = super::phase_selection(agent_name) {
+            if self.agents.contains_key(base) {
+                if let Some(mut agent) = super::get_agent(base) {
+                    agent.name = agent_name.to_string();
+                    return Arc::new(CodingAgent::new(agent));
+                }
+            }
+        }
         self.agents.get(agent_name).cloned().unwrap_or_else(|| {
             self.agents
                 .get(&self.default_name)

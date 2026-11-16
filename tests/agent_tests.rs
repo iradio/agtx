@@ -411,3 +411,43 @@ fn test_antigravity_transform_plugin_command() {
         Some("/gsd-plan-phase 1".to_string())
     );
 }
+
+#[test]
+fn phase_model_and_effort_apply_to_launch_and_resume() {
+    for (selection, model, effort) in [
+        ("codex-terra-medium", "gpt-6.1-terra", "medium"),
+        ("codex-luna-high", "gpt-6-luna", "high"),
+        ("codex-gpt-6.1-terra-xhigh", "gpt-6.1-terra", "xhigh"),
+        ("claude-fable-low", "fable", "low"),
+        ("claude-opus-medium", "opus", "medium"),
+    ] {
+        let base = agtx::agent::base_agent_name(selection);
+        let mut agent = agtx::agent::get_agent(base).unwrap();
+        agent.name = selection.to_string();
+        let launch = agent.build_interactive_command("hello");
+        let resume = agent.build_resume_command();
+        for command in [&launch, &resume] {
+            assert!(command.contains(&format!("--model {model}")), "{command}");
+            assert!(command.contains(effort), "{command}");
+        }
+        assert!(launch.ends_with("'hello'"));
+        assert!(agent_native_skill_dir(selection).is_some());
+    }
+}
+
+#[test]
+fn phase_selection_rejects_shell_metacharacters() {
+    assert!(agtx::agent::phase_selection("codex-$(touch-pwn)-high").is_none());
+    assert!(agtx::agent::phase_selection("codex-terra-invalid").is_none());
+}
+
+#[test]
+fn registry_resolves_phase_selection_to_the_requested_agent() {
+    use agtx::agent::{AgentRegistry, RealAgentRegistry};
+    let registry = RealAgentRegistry::new("codex");
+    let command = registry
+        .get("codex-luna-high")
+        .build_interactive_command("");
+    assert!(command.contains("--model gpt-6-luna"), "{command}");
+    assert!(command.contains("model_reasoning_effort=high"), "{command}");
+}

@@ -613,6 +613,24 @@ review = "codex"
 running = "codex"
 ```
 
+Phase entries also accept `agent-model-effort` for Codex and Claude:
+
+```toml
+[agents]
+research = "claude-fable-low"
+planning = "codex-terra-medium"
+running = "codex-luna-high"
+review = "claude-opus-medium"
+```
+
+The final component is the effort (`minimal`, `low`, `medium`, `high`, `xhigh`,
+or `max`, subject to the selected CLI/model). Model IDs may contain hyphens.
+Codex aliases `terra` and `luna` mean `gpt-6.1-terra` and `gpt-6-luna`;
+other model IDs are passed through to the CLI. Claude model aliases are passed
+through unchanged. A changed selection starts a new agent session on phase
+transition, even when both phases use the same CLI. Plain agent names continue
+to use that CLI's configured default model and effort.
+
 ## Plugins
 
 Plug any spec-driven framework into the task lifecycle. Define commands, prompts, and artifacts — agtx handles phase gating, artifact polling, worktree sync, agent switching, and autonomous execution.

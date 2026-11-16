@@ -180,7 +180,7 @@ impl Store {
 }
 
 fn store_for(agent: &str) -> Option<Store> {
-    match agent {
+    match super::base_agent_name(agent) {
         "claude" => Some(Store::ClaudeJson),
         "codex" => Some(Store::CodexToml),
         "gemini" => Some(Store::GeminiTrustedFolders),
