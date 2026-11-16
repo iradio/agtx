@@ -4115,6 +4115,7 @@ impl App {
 
                 let title_for_thread = task_title.clone();
                 let worktree_for_thread = worktree_path.clone();
+                let base_for_thread = pr_base(task.base_branch.as_deref(), &self.state.config.base_branch);
                 let git_ops = Arc::clone(&self.state.git_ops);
                 let agent_ops = self
                     .state
@@ -4124,7 +4125,7 @@ impl App {
                     let (pr_title, pr_body) = generate_pr_description(
                         &title_for_thread,
                         worktree_for_thread.as_deref(),
-                        None,
+                        base_for_thread.as_deref(),
                         git_ops.as_ref(),
                         agent_ops.as_ref(),
                     );
@@ -4219,6 +4220,7 @@ impl App {
 
                 // Clone data for background thread
                 let task_clone = task.clone();
+                let pr_base = pr_base(task.base_branch.as_deref(), &self.state.config.base_branch);
                 let project_path_clone = project_path.clone();
                 let pr_title_clone = pr_title.to_string();
                 let pr_body_clone = pr_body.to_string();
@@ -4240,6 +4242,7 @@ impl App {
                         &project_path_clone,
                         &pr_title_clone,
                         &pr_body_clone,
+                        pr_base.as_deref(),
                         git_ops.as_ref(),
                         git_provider_ops.as_ref(),
                         agent_ops.as_ref(),
@@ -10424,7 +10427,7 @@ fn capture_pane_text(
 pub(crate) fn generate_pr_description(
     task_title: &str,
     worktree_path: Option<&str>,
-    _branch_name: Option<&str>,
+    base_branch: Option<&str>,
     git_ops: &dyn GitOperations,
     agent_ops: &dyn AgentOperations,
 ) -> (String, String) {
@@ -10435,8 +10438,8 @@ pub(crate) fn generate_pr_description(
     // Try to get git diff for context
     if let Some(worktree) = worktree_path {
         let worktree_path = Path::new(worktree);
-        // Get diff from main
-        let diff_stat = git_ops.diff_stat_from_main(worktree_path);
+        // Match the base used for the pull request.
+        let diff_stat = git_ops.diff_stat_from_base(worktree_path, base_branch.unwrap_or("main"));
 
         if !diff_stat.is_empty() {
             default_body.push_str("## Changes\n```\n");
@@ -10460,12 +10463,19 @@ pub(crate) fn generate_pr_description(
     (default_title, default_body)
 }
 
+fn pr_base(recorded: Option<&str>, configured: &str) -> Option<String> {
+    recorded.filter(|base| !base.trim().is_empty())
+        .or_else(|| (!configured.trim().is_empty()).then_some(configured))
+        .map(str::to_string)
+}
+
 /// Create a PR with provided title and body, return (pr_number, pr_url)
 fn create_pr_with_content(
     task: &Task,
     project_path: &Path,
     pr_title: &str,
     pr_body: &str,
+    base_branch: Option<&str>,
     git_ops: &dyn GitOperations,
     git_provider_ops: &dyn GitProviderOperations,
     agent_ops: &dyn AgentOperations,
@@ -10494,13 +10504,13 @@ fn create_pr_with_content(
         git_ops.push(worktree_path, branch, true)?;
     }
 
-    // Create PR (use base_branch for stacked PRs)
+    // Create the PR against the same base used for its description
     git_provider_ops.create_pr(
         project_path,
         pr_title,
         pr_body,
         task.branch_name.as_deref().unwrap_or(""),
-        task.base_branch.clone(),
+        base_branch.map(str::to_string),
     )
 }
 

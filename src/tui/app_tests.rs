@@ -116,10 +116,10 @@ fn test_generate_pr_description_with_diff_and_agent() {
 
     // Setup: git returns a diff stat
     mock_git
-        .expect_diff_stat_from_main()
-        .withf(|path: &Path| path == Path::new("/tmp/worktree"))
+        .expect_diff_stat_from_base()
+        .withf(|path: &Path, base: &str| path == Path::new("/tmp/worktree") && base == "dev")
         .times(1)
-        .returning(|_| " src/main.rs | 10 +++++++---\n 1 file changed".to_string());
+        .returning(|_, _| " src/main.rs | 10 +++++++---\n 1 file changed".to_string());
 
     // Setup: agent generates a description
     mock_agent
@@ -136,7 +136,7 @@ fn test_generate_pr_description_with_diff_and_agent() {
     let (title, body) = generate_pr_description(
         "Add login feature",
         Some("/tmp/worktree"),
-        None,
+        Some("dev"),
         &mock_git,
         &mock_agent,
     );
@@ -181,8 +181,8 @@ fn test_generate_pr_description_with_empty_diff() {
 
     // Git returns empty diff (no changes from main)
     mock_git
-        .expect_diff_stat_from_main()
-        .returning(|_| String::new());
+        .expect_diff_stat_from_base()
+        .returning(|_, _| String::new());
 
     // Agent still generates description
     mock_agent
@@ -213,8 +213,8 @@ fn test_generate_pr_description_agent_failure() {
         .returning(|| crate::agent::PromptInjection::Unknown);
 
     mock_git
-        .expect_diff_stat_from_main()
-        .returning(|_| " file.rs | 5 +++++\n".to_string());
+        .expect_diff_stat_from_base()
+        .returning(|_, _| " file.rs | 5 +++++\n".to_string());
 
     // Agent fails to generate
     mock_agent
@@ -370,7 +370,7 @@ fn test_create_pr_with_content_success() {
                     && title == "Test PR"
                     && body == "Test body"
                     && branch == "feature/test"
-                    && base.is_none()
+                    && base.as_deref() == Some("dev")
             },
         )
         .times(1)
@@ -381,6 +381,7 @@ fn test_create_pr_with_content_success() {
         Path::new("/project"),
         "Test PR",
         "Test body",
+        Some("dev"),
         &mock_git,
         &mock_git_provider,
         &mock_agent,
@@ -441,6 +442,7 @@ fn test_create_pr_with_content_no_changes() {
         Path::new("/project"),
         "PR Title",
         "PR Body",
+        None,
         &mock_git,
         &mock_git_provider,
         &mock_agent,
@@ -500,6 +502,7 @@ fn test_create_pr_with_content_push_failure() {
         Path::new("/project"),
         "PR",
         "Body",
+        None,
         &mock_git,
         &mock_git_provider,
         &mock_agent,
@@ -9024,8 +9027,8 @@ fn test_handle_review_confirm_y_starts_pr_generation() {
     // y → calls move_running_to_review_with_pr → opens pr_confirm_popup (generating=true)
     let mut mock_git = MockGitOperations::new();
     mock_git
-        .expect_diff_stat_from_main()
-        .returning(|_| String::new());
+        .expect_diff_stat_from_base()
+        .returning(|_, _| String::new());
 
     let mut mock_registry = MockAgentRegistry::new();
     let mut mock_agent_ops = MockAgentOperations::new();
@@ -17169,4 +17172,12 @@ fn a_refresh_verdict_for_a_status_the_task_has_left_is_dropped() {
         matches!(app.state.phase_status_cache.get(&still_there.id), Some((PhaseStatus::Ready, _))),
         "a verdict for the task's current status still applies"
     );
+}
+
+#[test]
+fn pr_base_prefers_task_then_configured_branch() {
+    assert_eq!(pr_base(Some("stacked"), "dev").as_deref(), Some("stacked"));
+    assert_eq!(pr_base(None, "dev").as_deref(), Some("dev"));
+    assert_eq!(pr_base(Some(""), "dev").as_deref(), Some("dev"));
+    assert_eq!(pr_base(None, ""), None);
 }
