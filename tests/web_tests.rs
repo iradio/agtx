@@ -402,6 +402,38 @@ async fn unknown_task_is_a_404() {
 // ── diff ────────────────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn diff_uses_project_base_when_task_has_no_explicit_base() {
+    let f = fixture();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .current_dir(&f.project_path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    };
+    git(&["branch", "dev", "HEAD"]);
+    std::fs::create_dir_all(f.project_path.join(".agtx")).unwrap();
+    std::fs::write(
+        f.project_path.join(".agtx/config.toml"),
+        "base_branch = \"dev\"\n",
+    )
+    .unwrap();
+    let db = Database::open_project(&f.project_path).unwrap();
+    let mut t = Task::new("Configured base", "claude", &f.project_id);
+    t.worktree_path = Some(f.project_path.to_string_lossy().to_string());
+    db.create_task(&t).unwrap();
+    let (status, body) = get(
+        state_for(&f, ServeMode::Global),
+        &format!("/api/projects/{}/tasks/{}/diff", f.project_id, t.id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["base"], "dev");
+    assert_eq!(body["patch"], "");
+}
+
+#[tokio::test]
 async fn diff_returns_stat_and_patch_against_the_base_branch() {
     let f = fixture();
     let db = Database::open_project(&f.project_path).unwrap();

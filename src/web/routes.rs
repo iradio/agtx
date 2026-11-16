@@ -368,7 +368,8 @@ fn spawn_conflict_refresh(state: Arc<ServerState>, pid: &str, tasks: &[Task]) {
 /// `git merge-tree` only fail when git cannot be **spawned**, so a base that no
 /// longer resolves comes back as an empty diff and no conflicts — which reads
 /// as "nothing to do" for a task whose work is entirely intact. Falling back to
-/// detection and reporting which base was used keeps the answer honest.
+/// the configured project base, then detection, and reporting which base was
+/// used keeps the answer honest. Task-specific bases take precedence.
 fn resolve_base(
     project: &std::path::Path,
     worktree: &std::path::Path,
@@ -377,6 +378,15 @@ fn resolve_base(
     recorded
         .filter(|b| !b.is_empty() && crate::git::ref_exists(worktree, b))
         .map(str::to_string)
+        .or_else(|| {
+            let global = crate::config::GlobalConfig::load().unwrap_or_default();
+            let project_config = crate::config::ProjectConfig::load(project).unwrap_or_default();
+            let configured =
+                crate::config::MergedConfig::merge(&global, &project_config).base_branch;
+            let configured = configured.trim();
+            (!configured.is_empty() && crate::git::ref_exists(worktree, configured))
+                .then(|| configured.to_string())
+        })
         .or_else(|| {
             crate::git::detect_main_branch(project)
                 .ok()
