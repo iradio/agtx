@@ -40,8 +40,8 @@ pub trait GitOperations: Send + Sync {
     /// Get diff for untracked file (comparing to /dev/null)
     fn diff_untracked_file(&self, worktree_path: &Path, file: &str) -> String;
 
-    /// Get diff stats from main branch
-    fn diff_stat_from_main(&self, worktree_path: &Path) -> String;
+    /// Get diff stats against a base branch
+    fn diff_stat_from_base(&self, worktree_path: &Path, base: &str) -> String;
 
     /// Stage all changes
     fn add_all(&self, worktree_path: &Path) -> Result<()>;
@@ -188,10 +188,10 @@ impl GitOperations for RealGitOps {
             .unwrap_or_default()
     }
 
-    fn diff_stat_from_main(&self, worktree_path: &Path) -> String {
+    fn diff_stat_from_base(&self, worktree_path: &Path, base: &str) -> String {
         std::process::Command::new("git")
             .current_dir(worktree_path)
-            .args(["diff", "main", "--stat"])
+            .args(["diff", base, "--stat"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
             .unwrap_or_default()
