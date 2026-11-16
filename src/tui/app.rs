@@ -10052,7 +10052,7 @@ fn setup_task_worktree(
     if !skip_init_scripts {
         if let Some(ref p) = plugin {
             if let Some(ref script) = p.init_script {
-                let script = script.replace("{agent}", agent_name);
+                let script = script.replace("{agent}", agent::base_agent_name(agent_name));
                 tracing::info!(
                     script = %script,
                     agent = agent_name,

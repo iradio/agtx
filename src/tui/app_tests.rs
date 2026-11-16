@@ -3410,6 +3410,23 @@ fn a_task_stored_without_a_base_agent_falls_back_to_the_default() {
 }
 
 #[test]
+fn phase_switches_when_only_model_or_effort_changes() {
+    let mut config = MergedConfig::merge(&GlobalConfig::default(), &ProjectConfig::default());
+    config.phase_agents.running = Some("codex-luna-high".into());
+    let mut task = Task::new("task", "codex", "project");
+    task.agent = "codex-terra-medium".into();
+    assert_eq!(
+        needs_agent_switch(&config, &task, "running"),
+        ("codex-luna-high".into(), true)
+    );
+    task.agent = "codex-luna-high".into();
+    assert_eq!(
+        needs_agent_switch(&config, &task, "running"),
+        ("codex-luna-high".into(), false)
+    );
+}
+
+#[test]
 fn test_collect_phase_agents_all_same() {
     use crate::config::{GlobalConfig, MergedConfig, ProjectConfig};
     use crate::db::Task;
